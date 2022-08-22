@@ -50,7 +50,7 @@ class paper_trading():
         signal_ticker = self.signal_params['ticker']
 
         self.signal = signal_map[signal_name](
-            signal_name, signal_data_path, signal_ticker, signal_params)
+            signal_name, signal_data_path, signal_ticker, **signal_params)
 
         self.df_signal_data = self.signal.compute_signal()
 
@@ -102,7 +102,7 @@ class paper_trading():
 
         order_params = self.sizer(0.5)
 
-        orders = self.api.create_order(order_params)
+        orders = self.api.create_order(**order_params)
 
         orders['Datetime'] = self.now
 

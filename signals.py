@@ -15,13 +15,13 @@ class signal():
         df_data = read_csv(f'{self.data_path}/{self.ticker}.csv')
         self.index_name = df_data.columns[0]
         df_data[self.index_name] = to_datetime(df_data[self.index_name])
-        df_data.set_index(self.index_name, inplace=TRUE)
+        df_data.set_index(self.index_name, inplace=True)
 
         self.data = df_data
 
     def get_last_trigger(self):
         
-        triggers = self.data[self.data[f'{self.ticker}_{self.name}']!=0,:].copy()
+        triggers = self.data.loc[self.data[f'{self.ticker}_{self.name}']!=0,:].copy()
         
         return triggers.index[-1], triggers[f'{self.ticker}_{self.name}'].iloc[-1]
 
