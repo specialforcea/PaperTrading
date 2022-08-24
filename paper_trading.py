@@ -5,6 +5,8 @@ from signals import signal_map
 from alpaca_api import alpaca_api
 from datetime import datetime
 
+YmdHMS_format = "%Y-%m-%d-%H-%M-%S"
+
 
 class paper_trading():
 
@@ -30,10 +32,18 @@ class paper_trading():
 
     def load_entries(self):
 
-        self.df_orders = read_csv(f'{self.result_path}/orders.csv')
-        self.df_positions = read_csv(f'{self.result_path}/positions.csv')
+        self.df_orders = read_csv(
+            f'{self.result_path}/orders.csv')
+        if not self.df_orders.empty:
+            self.df_orders.set_index('Datetime', inplace=True)
+
+        self.df_positions = read_csv(
+            f'{self.result_path}/positions.csv')
+        if not self.df_positions.empty:
+            self.df_positions.set_index('Datetime', inplace=True)
+
         self.df_saved_signal_data = read_csv(
-            f'{self.result_path}/signal_data.csv')
+            f'{self.result_path}/signal_data.csv', index_col=['Datetime'])
 
     def save_entries(self):
 
@@ -82,7 +92,7 @@ class paper_trading():
 
             open_orders = []
 
-            for id in self.df_orders[self.df_orders['status'].isin(self.api.unfinished_order_status), 'id'].values:
+            for id in set(self.df_orders.loc[self.df_orders['status'].isin(self.api.unfinished_order_status), 'id'].values):
 
                 open_orders.append(self.api.get_order(id=id))
 
@@ -93,10 +103,10 @@ class paper_trading():
             open_orders.append(self.api.create_order(order_params))
 
         df_open_orders = DataFrame(open_orders)
-        df_open_orders['Datetime'] = self.now
+        df_open_orders['Datetime'] = self.now.strftime(YmdHMS_format)
 
         self.df_orders = self.df_orders.append(
-            df_open_orders.set_index('Datatime'))
+            df_open_orders.set_index('Datetime'))
 
     def record_new_orders(self):
 
@@ -104,18 +114,19 @@ class paper_trading():
 
         orders = self.api.create_order(**order_params)
 
-        orders['Datetime'] = self.now
+        self.df_orders = DataFrame(
+            orders, index=[self.now.strftime(YmdHMS_format)])
 
-        self.df_orders = DataFrame(orders).set_index('Datatime')
+        self.df_orders.index.name = 'Datetime'
 
     def update_positions(self):
 
         positions = self.api.get_all_positions()
 
-        positions['Datetime'] = self.now
-
         self.df_positions = self.df_positions.append(
-            DataFrame(positions).set_index('Datatime'))
+            DataFrame(positions, index=[self.now.strftime(YmdHMS_format)]))
+
+        self.df_positions.index.name = 'Datetime'
 
     def update_entries(self):
 

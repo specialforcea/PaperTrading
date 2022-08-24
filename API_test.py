@@ -49,6 +49,12 @@ def cancel_order(id=None):
 
     return r
 
+def cancel_all_order():
+
+    r = requests.delete(f'{ORDERS_URL}', headers=HEADER)
+
+    return r
+
 # orders = get_orders(id='1975d9b2-f188-40c8-913d-874dda2d7767')
 # print(orders)
 # response = cancel_order(id=orders[0]['id'])
@@ -59,5 +65,5 @@ def get_all_positions():
 
     return json.loads(r.content)
 
-response = get_all_orders()
+response = cancel_all_order()
 print(response)

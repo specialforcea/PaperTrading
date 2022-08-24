@@ -3,7 +3,7 @@ from datetime import datetime
 
 time = datetime.now()
 
-PT_id = 'Momentum_08212022'#time.strftime("%Y_%m_%d_%H_%M_%S")
+PT_id = 'Momentum_08242022'#time.strftime("%Y_%m_%d_%H_%M_%S")
 
 signal_params = {
     'name' : 'MomentumCrossoverSignal',
