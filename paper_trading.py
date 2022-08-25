@@ -34,20 +34,29 @@ class paper_trading():
 
         self.df_orders = read_csv(
             f'{self.result_path}/orders.csv')
+        self.last_order_status_dt = datetime(year=1900, month=1, day=1)
         if not self.df_orders.empty:
+            self.df_orders['Datetime'] = to_datetime(
+                self.df_orders['Datetime'], format=YmdHMS_format)
             self.df_orders.set_index('Datetime', inplace=True)
+            self.last_order_status_dt = self.df_orders.index[-1]
 
         self.df_positions = read_csv(
             f'{self.result_path}/positions.csv')
         if not self.df_positions.empty:
+            self.df_positions['Datetime'] = to_datetime(
+                self.df_positions['Datetime'], format=YmdHMS_format)
             self.df_positions.set_index('Datetime', inplace=True)
 
         self.df_saved_signal_data = read_csv(
             f'{self.result_path}/signal_data.csv', index_col=['Datetime'])
 
     def save_entries(self):
-
+        self.df_orders.index = self.df_orders.index.strftime(YmdHMS_format)
         self.df_orders.to_csv(f'{self.result_path}/orders.csv')
+
+        self.df_positions.index = self.df_positions.index.strftime(
+            YmdHMS_format)
         self.df_positions.to_csv(f'{self.result_path}/positions.csv')
         self.df_signal_data.to_csv(
             f'{self.result_path}/signal_data.csv')
@@ -68,13 +77,25 @@ class paper_trading():
 
         self.last_signal_data_dt = self.signal.get_last_data_dt()
 
+    def get_qty_available(self, ticker):
+
+        return int(self.df_positions.loc[self.df_positions['symbol'] == ticker, 'qty_available'].iloc[-1])
+
     def sizer(self, pct):
 
         close = self.df_signal_data['Close'].iloc[-1]
 
-        qty = self.init_value*pct//close
+        target_qty = self.init_value*pct//close
 
         side = 'buy' if self.last_trigger[-1] == 1 else 'sell'
+
+        target_qty = -target_qty if side=='sell' else target_qty
+
+        qty = target_qty - self.get_qty_available(self.signal_params['ticker'])
+
+        side = 'buy' if qty>0 else 'sell'
+
+        qty = abs(qty)
 
         order_params = {
             "symbol": self.signal_params['ticker'],
@@ -88,22 +109,22 @@ class paper_trading():
 
     def record_existing_open_orders_and_new_orders(self):
 
-        if not self.df_orders.empty:
+        open_orders = []
 
-            open_orders = []
+        if not self.df_orders.empty:
 
             for id in set(self.df_orders.loc[self.df_orders['status'].isin(self.api.unfinished_order_status), 'id'].values):
 
                 open_orders.append(self.api.get_order(id=id))
 
-        if self.last_signal_data_dt == self.last_trigger[0]:
+        if self.last_order_status_dt < self.last_trigger[0]:
 
             order_params = self.sizer(0.5)
 
-            open_orders.append(self.api.create_order(order_params))
+            open_orders.append(self.api.create_order(**order_params))
 
         df_open_orders = DataFrame(open_orders)
-        df_open_orders['Datetime'] = self.now.strftime(YmdHMS_format)
+        df_open_orders['Datetime'] = self.now
 
         self.df_orders = self.df_orders.append(
             df_open_orders.set_index('Datetime'))
@@ -124,7 +145,7 @@ class paper_trading():
         positions = self.api.get_all_positions()
 
         self.df_positions = self.df_positions.append(
-            DataFrame(positions, index=[self.now.strftime(YmdHMS_format)]))
+            DataFrame(positions, index=[self.now]))
 
         self.df_positions.index.name = 'Datetime'
 

@@ -23,11 +23,11 @@ class signal():
         
         triggers = self.data.loc[self.data[f'{self.ticker}_{self.name}']!=0,:].copy()
         
-        return triggers.index[-1], triggers[f'{self.ticker}_{self.name}'].iloc[-1]
+        return triggers.index[-1].replace(tzinfo=None), triggers[f'{self.ticker}_{self.name}'].iloc[-1]
 
     def get_last_data_dt(self):
 
-        return self.data.index[-1]
+        return self.data.index[-1].replace(tzinfo=None) 
 
 
 class MomentumCrossoverSignal(signal):
