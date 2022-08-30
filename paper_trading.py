@@ -4,6 +4,7 @@ from pandas import read_csv, to_datetime, DataFrame
 from signals import signal_map
 from alpaca_api import alpaca_api
 from datetime import datetime
+import time
 
 YmdHMS_format = "%Y-%m-%d-%H-%M-%S"
 
@@ -89,13 +90,19 @@ class paper_trading():
 
         side = 'buy' if self.last_trigger[-1] == 1 else 'sell'
 
-        target_qty = -target_qty if side=='sell' else target_qty
+        avail_qty = self.get_qty_available(self.signal_params['ticker'])
 
-        qty = target_qty - self.get_qty_available(self.signal_params['ticker'])
-
-        side = 'buy' if qty>0 else 'sell'
-
-        qty = abs(qty)
+        if (side == 'buy' and avail_qty < 0) or (side == 'sell' and avail_qty > 0):
+            close_first = True
+            qty = target_qty
+        elif side == 'buy' and avail_qty >= 0:
+            qty = target_qty - avail_qty
+            qty, side = -qty, 'sell' if qty < 0 else qty, side
+            close_first = False
+        elif side == 'sell' and avail_qty <= 0:
+            qty = target_qty + avail_qty
+            qty, side = -qty, 'buy' if qty < 0 else qty, side
+            close_first = False
 
         order_params = {
             "symbol": self.signal_params['ticker'],
@@ -105,7 +112,17 @@ class paper_trading():
             "time_in_force": 'day'
         }
 
-        return order_params
+        close_order_side = 'buy' if avail_qty < 0 else 'sell'
+
+        close_order_params = {
+            "symbol": self.signal_params['ticker'],
+            "qty": abs(avail_qty),
+            "type": 'market',
+            "side": close_order_side,
+            "time_in_force": 'day'
+        }
+
+        return order_params, close_first, close_order_params
 
     def record_existing_open_orders_and_new_orders(self):
 
@@ -113,13 +130,19 @@ class paper_trading():
 
         if not self.df_orders.empty:
 
-            for id in set(self.df_orders.loc[self.df_orders['status'].isin(self.api.unfinished_order_status), 'id'].values):
+            df_temp = self.df_orders.reset_index()
+
+            for id in df_temp.loc[(df_temp['status'].isin(self.api.unfinished_order_status)) & (df_temp['Datetime'] == self.last_order_status_dt), 'id'].values:
 
                 open_orders.append(self.api.get_order(id=id))
 
         if self.last_order_status_dt < self.last_trigger[0]:
 
-            order_params = self.sizer(0.5)
+            order_params, close_first, close_order_params = self.sizer(0.5)
+
+            if close_first:
+                open_orders.append(self.api.create_order(**close_order_params))
+                time.sleep(1)
 
             open_orders.append(self.api.create_order(**order_params))
 
