@@ -11,13 +11,14 @@ YmdHMS_format = "%Y-%m-%d-%H-%M-%S"
 
 class paper_trading():
 
-    def __init__(self, id: str, signal_params: dict, init_value: float) -> None:
+    def __init__(self, id: str, signal_params: dict, execution_params: dict, init_value: float) -> None:
         self.id = id
         self.result_path = f'./Results/{self.id}'
         self.signal_params = signal_params
         self.api = alpaca_api()
         self.init_value = init_value
         self.now = datetime.now()
+        self.execution_params = execution_params
 
     def is_existing_pt(self):
 
@@ -48,6 +49,7 @@ class paper_trading():
             self.df_positions['Datetime'] = to_datetime(
                 self.df_positions['Datetime'], format=YmdHMS_format)
             self.df_positions.set_index('Datetime', inplace=True)
+            self.last_positions_dt = self.df_positions.index[-1]
 
         self.df_saved_signal_data = read_csv(
             f'{self.result_path}/signal_data.csv', index_col=['Datetime'])
@@ -80,7 +82,13 @@ class paper_trading():
 
     def get_qty_available(self, ticker):
 
-        return int(self.df_positions.loc[self.df_positions['symbol'] == ticker, 'qty_available'].iloc[-1])
+        df_temp = self.df_positions.reset_index()
+
+        df_temp = df_temp.loc[(df_temp['Datetime']==self.last_positions_dt) & (df_temp['symbol']==ticker),:]
+        if df_temp.empty:
+            return 0
+        else:
+            return int(df_temp['qty_available'].iloc[0])
 
     def sizer(self, pct):
 
@@ -97,11 +105,11 @@ class paper_trading():
             qty = target_qty
         elif side == 'buy' and avail_qty >= 0:
             qty = target_qty - avail_qty
-            qty, side = -qty, 'sell' if qty < 0 else qty, side
+            qty, side = (-qty, 'sell') if qty < 0 else (qty, side)
             close_first = False
         elif side == 'sell' and avail_qty <= 0:
             qty = target_qty + avail_qty
-            qty, side = -qty, 'buy' if qty < 0 else qty, side
+            qty, side = (-qty, 'buy') if qty < 0 else (qty, side)
             close_first = False
 
         order_params = {
@@ -136,10 +144,11 @@ class paper_trading():
 
                 open_orders.append(self.api.get_order(id=id))
 
-        if self.last_order_status_dt < self.last_trigger[0]:
+        # if self.last_order_status_dt < self.last_trigger[0]:
 
-            order_params, close_first, close_order_params = self.sizer(0.5)
+        order_params, close_first, close_order_params = self.sizer(self.execution_params['single_pos_pct'][self.signal_params['ticker']])
 
+        if order_params['qty']>self.execution_params['trade_smallest_qty']:
             if close_first:
                 open_orders.append(self.api.create_order(**close_order_params))
                 time.sleep(1)
@@ -171,6 +180,8 @@ class paper_trading():
             DataFrame(positions, index=[self.now]))
 
         self.df_positions.index.name = 'Datetime'
+
+        self.last_positions_dt = self.df_positions.index[-1]
 
     def update_entries(self):
 

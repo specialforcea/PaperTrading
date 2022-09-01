@@ -25,7 +25,8 @@ class alpaca_api():
             'pending_replace',
             'accepted',
             'pending_new',
-            'accepted_for_bidding'
+            'accepted_for_bidding',
+            'new'
         }
 
 
