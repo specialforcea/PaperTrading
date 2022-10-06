@@ -84,7 +84,8 @@ class paper_trading():
 
         df_temp = self.df_positions.reset_index()
 
-        df_temp = df_temp.loc[(df_temp['Datetime']==self.last_positions_dt) & (df_temp['symbol']==ticker),:]
+        df_temp = df_temp.loc[(df_temp['Datetime'] == self.last_positions_dt) & (
+            df_temp['symbol'] == ticker), :]
         if df_temp.empty:
             return 0
         else:
@@ -146,9 +147,10 @@ class paper_trading():
 
         # if self.last_order_status_dt < self.last_trigger[0]:
 
-        order_params, close_first, close_order_params = self.sizer(self.execution_params['single_pos_pct'][self.signal_params['ticker']])
+        order_params, close_first, close_order_params = self.sizer(
+            self.execution_params['single_pos_pct'][self.signal_params['ticker']])
 
-        if order_params['qty']>self.execution_params['trade_smallest_qty']:
+        if order_params['qty'] > self.execution_params['trade_smallest_qty']:
             if close_first:
                 open_orders.append(self.api.create_order(**close_order_params))
                 time.sleep(1)
