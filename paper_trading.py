@@ -7,6 +7,7 @@ from datetime import datetime
 import time
 
 YmdHMS_format = "%Y-%m-%d-%H-%M-%S"
+Ymd_format = "%Y-%m-%d"
 
 
 class paper_trading():
@@ -42,6 +43,8 @@ class paper_trading():
                 self.df_orders['Datetime'], format=YmdHMS_format)
             self.df_orders.set_index('Datetime', inplace=True)
             self.last_order_status_dt = self.df_orders.index[-1]
+        else:
+            self.df_orders = DataFrame()
 
         self.df_positions = read_csv(
             f'{self.result_path}/positions.csv')
@@ -50,19 +53,33 @@ class paper_trading():
                 self.df_positions['Datetime'], format=YmdHMS_format)
             self.df_positions.set_index('Datetime', inplace=True)
             self.last_positions_dt = self.df_positions.index[-1]
+        else:
+            self.df_positions = DataFrame()
 
-        self.df_saved_signal_data = read_csv(
-            f'{self.result_path}/signal_data.csv', index_col=['Datetime'])
+        self.df_saved_predictions = read_csv(
+            f'{self.result_path}/predictions.csv')
+        if not self.df_saved_predictions.empty:
+            self.df_saved_predictions['date'] = to_datetime(
+                self.df_saved_predictions['date'], format=Ymd_format)
+            self.df_saved_predictions.set_index(['ticker','date'], inplace=True)
+        else:
+            self.df_saved_predictions = DataFrame()
+            
 
     def save_entries(self):
         self.df_orders.index = self.df_orders.index.strftime(YmdHMS_format)
         self.df_orders.to_csv(f'{self.result_path}/orders.csv')
 
-        self.df_positions.index = self.df_positions.index.strftime(
-            YmdHMS_format)
+        if not self.df_positions.empty:
+            self.df_positions.index = self.df_positions.index.strftime(
+                YmdHMS_format)
         self.df_positions.to_csv(f'{self.result_path}/positions.csv')
         self.df_signal_data.to_csv(
             f'{self.result_path}/signal_data.csv')
+            
+        self.df_saved_predictions = self.df_saved_predictions.append(self.predictions).drop_duplicates()
+        self.df_saved_predictions.to_csv(
+            f'{self.result_path}/predictions.csv')
 
     def load_signal(self):
 
@@ -76,12 +93,17 @@ class paper_trading():
 
         self.df_signal_data = self.signal.compute_signal()
 
-        self.last_trigger = self.signal.get_last_trigger()
+        self.predictions = self.signal.get_predictions()
 
-        self.last_signal_data_dt = self.signal.get_last_data_dt()
+
+        # self.last_trigger = self.signal.get_last_trigger()
+
+        # self.last_signal_data_dt = self.signal.get_last_data_dt()
 
     def get_qty_available(self, ticker):
 
+        if not hasattr(self, 'df_positions') or self.df_positions.empty:
+            return 0
         df_temp = self.df_positions.reset_index()
 
         df_temp = df_temp.loc[(df_temp['Datetime'] == self.last_positions_dt) & (
@@ -91,15 +113,11 @@ class paper_trading():
         else:
             return int(df_temp['qty_available'].iloc[0])
 
-    def sizer(self, pct):
-
-        close = self.df_signal_data['Close'].iloc[-1]
+    def sizer(self, tick, pct, close, side):
 
         target_qty = self.init_value*pct//close
 
-        side = 'buy' if self.last_trigger[-1] == 1 else 'sell'
-
-        avail_qty = self.get_qty_available(self.signal_params['ticker'])
+        avail_qty = self.get_qty_available(tick)
 
         if (side == 'buy' and avail_qty < 0) or (side == 'sell' and avail_qty > 0):
             close_first = True
@@ -112,9 +130,14 @@ class paper_trading():
             qty = target_qty + avail_qty
             qty, side = (-qty, 'buy') if qty < 0 else (qty, side)
             close_first = False
+        elif side=='Neu':
+            qty = 0
+            side = 'buy' if avail_qty<=0 else 'sell'
+            close_first = True if abs(avail_qty)>0 else False
+
 
         order_params = {
-            "symbol": self.signal_params['ticker'],
+            "symbol": tick,
             "qty": qty,
             "type": 'market',
             "side": side,
@@ -124,7 +147,7 @@ class paper_trading():
         close_order_side = 'buy' if avail_qty < 0 else 'sell'
 
         close_order_params = {
-            "symbol": self.signal_params['ticker'],
+            "symbol": tick,
             "qty": abs(avail_qty),
             "type": 'market',
             "side": close_order_side,
@@ -135,7 +158,7 @@ class paper_trading():
 
     def record_existing_open_orders_and_new_orders(self):
 
-        open_orders = []
+        self.open_orders = []
 
         if not self.df_orders.empty:
 
@@ -143,36 +166,36 @@ class paper_trading():
 
             for id in df_temp.loc[(df_temp['status'].isin(self.api.unfinished_order_status)) & (df_temp['Datetime'] == self.last_order_status_dt), 'id'].values:
 
-                open_orders.append(self.api.get_order(id=id))
+                self.open_orders.append(self.api.get_order(id=id))
 
         # if self.last_order_status_dt < self.last_trigger[0]:
 
-        order_params, close_first, close_order_params = self.sizer(
-            self.execution_params['single_pos_pct'][self.signal_params['ticker']])
+        self.record_new_orders(init_list=False)
 
-        if order_params['qty'] > self.execution_params['trade_smallest_qty']:
+    def record_new_orders(self, init_list=True):
+
+        if init_list:
+            self.open_orders = []
+        for idx, row in self.predictions.iterrows():
+
+            order_params, close_first, close_order_params = self.sizer(
+                idx[0], self.execution_params['rank_pct'].get(int(row.Rank), 0.),
+                row.Close, row.side
+            )
+
             if close_first:
-                open_orders.append(self.api.create_order(**close_order_params))
+                self.open_orders.append(
+                    self.api.create_order(**close_order_params))
                 time.sleep(1)
+            if order_params['qty'] > self.execution_params['trade_smallest_qty']:
+                
+                self.open_orders.append(self.api.create_order(**order_params))
 
-            open_orders.append(self.api.create_order(**order_params))
-
-        df_open_orders = DataFrame(open_orders)
+        df_open_orders = DataFrame(self.open_orders)
         df_open_orders['Datetime'] = self.now
 
         self.df_orders = self.df_orders.append(
             df_open_orders.set_index('Datetime'))
-
-    def record_new_orders(self):
-
-        order_params = self.sizer(0.5)
-
-        orders = self.api.create_order(**order_params)
-
-        self.df_orders = DataFrame(
-            orders, index=[self.now.strftime(YmdHMS_format)])
-
-        self.df_orders.index.name = 'Datetime'
 
     def update_positions(self):
 
@@ -206,5 +229,7 @@ class paper_trading():
             self.record_new_orders()
 
             self.df_positions = DataFrame()
+
+            self.df_saved_predictions = DataFrame()
 
             self.save_entries()
