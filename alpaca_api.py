@@ -12,6 +12,7 @@ class alpaca_api():
         self.ACCOUNT_URL = f'{APCA_API_BASE_URL}/v2/account'
         self.ORDERS_URL = f'{APCA_API_BASE_URL}/v2/orders'
         self.POSITIONS_URL = f'{APCA_API_BASE_URL}/v2/positions'
+        self.PORTFOLIO_HISTORY_URL = f'{APCA_API_BASE_URL}/v2/account/portfolio/history'
 
         self.HEADER = {
             'APCA-API-KEY-ID': ALPACA_API_KEY,
@@ -80,5 +81,16 @@ class alpaca_api():
 
         r = requests.get(f'{self.POSITIONS_URL}', headers=self.HEADER)
 
+        return json.loads(r.content)
+
+    def get_portfolio_history(self, period='5D',timeframe='1H'):
+
+        portfolio_params = {
+            "period": period,
+            "timeframe": timeframe,
+            "date_end": None,
+            "extended_hours": False
+        }
+        r = requests.get(f'{self.PORTFOLIO_HISTORY_URL}', json=portfolio_params, headers=self.HEADER)
         return json.loads(r.content)
         

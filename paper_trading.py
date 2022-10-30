@@ -56,6 +56,15 @@ class paper_trading():
         else:
             self.df_positions = DataFrame()
 
+        self.df_pv = read_csv(
+            f'{self.result_path}/portfolio_values.csv')
+        if not self.df_pv.empty:
+            self.df_pv['Datetime'] = to_datetime(
+                self.df_pv['Datetime'], format=YmdHMS_format)
+            self.df_pv.set_index('Datetime', inplace=True)
+        else:
+            self.df_pv = DataFrame()
+
         self.df_saved_predictions = read_csv(
             f'{self.result_path}/predictions.csv')
         if not self.df_saved_predictions.empty:
@@ -74,6 +83,12 @@ class paper_trading():
             self.df_positions.index = self.df_positions.index.strftime(
                 YmdHMS_format)
         self.df_positions.to_csv(f'{self.result_path}/positions.csv')
+
+        if not self.df_pv.empty:
+            self.df_pv.index = self.df_pv.index.strftime(
+                YmdHMS_format)
+        self.df_pv.to_csv(f'{self.result_path}/portfolio_values.csv')
+
         self.df_signal_data.to_csv(
             f'{self.result_path}/signal_data.csv')
             
@@ -176,8 +191,14 @@ class paper_trading():
 
         if init_list:
             self.open_orders = []
+
+        unfinished_order_symbols = [od['symbol'] for od in self.open_orders]
+
         for idx, row in self.predictions.iterrows():
 
+            if idx[0] in unfinished_order_symbols:
+                continue
+            
             order_params, close_first, close_order_params = self.sizer(
                 idx[0], self.execution_params['rank_pct'].get(int(row.Rank), 0.),
                 row.Close, row.side
@@ -202,11 +223,20 @@ class paper_trading():
         positions = self.api.get_all_positions()
 
         self.df_positions = self.df_positions.append(
-            DataFrame(positions, index=[self.now]))
+            DataFrame(positions, index=[self.now]*len(positions)))
 
         self.df_positions.index.name = 'Datetime'
 
         self.last_positions_dt = self.df_positions.index[-1]
+
+    def update_pv(self):
+
+        pv = DataFrame(self.api.get_portfolio_history(period='1M',timeframe='1H'))
+
+        pv['timestamp'] = pv['timestamp'].apply(lambda x: datetime.fromtimestamp(x))
+        pv = pv.rename(columns={'timestamp':'Datetime'}).set_index('Datetime')
+
+        self.df_pv = self.df_pv.append(pv).drop_duplicates()
 
     def update_entries(self):
 
@@ -217,6 +247,8 @@ class paper_trading():
             self.load_entries()
 
             self.update_positions()
+
+            self.update_pv()
 
             self.record_existing_open_orders_and_new_orders()
 
@@ -231,5 +263,7 @@ class paper_trading():
             self.df_positions = DataFrame()
 
             self.df_saved_predictions = DataFrame()
+
+            self.df_pv = DataFrame()
 
             self.save_entries()

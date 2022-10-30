@@ -40,7 +40,16 @@ def create_order(symbol, qty, side, type, time_in_force, limit_price=None, stop_
     r = requests.post(ORDERS_URL, json=order_params, headers=HEADER)
     return json.loads(r.content)
     
-# response = create_order('SPY', 300, 'buy','market','day')
+def get_portfolio_history(period='5D',timeframe='1H'):
+
+    portfolio_params = {
+        "period": period,
+        "timeframe": timeframe,
+        "date_end": None,
+        "extended_hours": False
+    }
+    r = requests.get(f'{PORTFOLIO_HISTORY_URL}', json=portfolio_params, headers=HEADER)
+    return json.loads(r.content)    
 # response = create_order('AAPL', 50, 'buy','market','gtc')
 
 def cancel_order(id=None):
@@ -65,5 +74,10 @@ def get_all_positions():
 
     return json.loads(r.content)
 
-response = cancel_all_order()
-print(response)
+# response = get_portfolio_history(period='3D', timeframe='15Min')
+# response = get_all_orders()
+# print(response)
+if __name__ == 'main':
+    # response = cancel_all_order()
+    response = get_portfolio_history(period='10D')
+    print(response)
