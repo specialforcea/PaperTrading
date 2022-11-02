@@ -198,7 +198,7 @@ class paper_trading():
 
             if idx[0] in unfinished_order_symbols:
                 continue
-            
+
             order_params, close_first, close_order_params = self.sizer(
                 idx[0], self.execution_params['rank_pct'].get(int(row.Rank), 0.),
                 row.Close, row.side
@@ -236,7 +236,9 @@ class paper_trading():
         pv['timestamp'] = pv['timestamp'].apply(lambda x: datetime.fromtimestamp(x))
         pv = pv.rename(columns={'timestamp':'Datetime'}).set_index('Datetime')
 
-        self.df_pv = self.df_pv.append(pv).drop_duplicates()
+        self.df_pv = self.df_pv.append(pv)
+        self.df_pv = self.df_pv[~self.df_pv.index.duplicated(keep='last')].sort_index()
+
 
     def update_entries(self):
 
