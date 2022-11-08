@@ -192,7 +192,7 @@ class paper_trading():
         if init_list:
             self.open_orders = []
 
-        unfinished_order_symbols = [od['symbol'] for od in self.open_orders]
+        unfinished_order_symbols = [od['symbol'] for od in self.open_orders if od['status'] in self.api.unfinished_order_status]
 
         for idx, row in self.predictions.iterrows():
 
