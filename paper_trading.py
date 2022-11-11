@@ -1,4 +1,3 @@
-from multiprocessing.util import is_exiting
 import os
 from pandas import read_csv, to_datetime, DataFrame
 from signals import signal_map

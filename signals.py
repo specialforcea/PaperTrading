@@ -185,6 +185,10 @@ class SectorRankSignal(signal):
 
         return self.data
 
+    def compute_backtest(self):
+        pass
+
+
 
 signal_map = {
     'MomentumCrossoverSignal': MomentumCrossoverSignal,
