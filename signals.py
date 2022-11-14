@@ -89,6 +89,7 @@ class SectorRankSignal(signal):
         self.num_short = kwargs['num_short']
         self.lookahead = kwargs['lookahead']
         self.hist_length = kwargs['load_data_history_length']
+        self.num_models = kwargs['num_models']
 
     def load_data(self):
 
@@ -159,7 +160,7 @@ class SectorRankSignal(signal):
             self.data[feature] = factorize(self.data[feature], sort=True)[0]
 
         test_idx = MultiIndex.from_product([self.data.index.get_level_values(
-            'ticker').unique(), [self.data.index.get_level_values('date')[-10]]])
+            'ticker').unique(), [self.data.index.get_level_values('date')[-self.lookahead]]])
         test_set = self.data.loc[test_idx, :]
         # y_test = test_set.loc[:, label].to_frame('y_test')
         predictions = []
@@ -177,20 +178,63 @@ class SectorRankSignal(signal):
             .sort_values(by='Rank')
             .assign(side=(['buy']*self.num_long + ['Neu']*(len(self.ticker) - self.num_long - self.num_short) + ['sell']*self.num_short)))
 
-    def compute_signal(self):
+    def compute_backtest_predictions(self):
+
+        categoricals = ['year', 'weekday', 'month']
+        for feature in categoricals:
+            self.data[feature] = factorize(self.data[feature], sort=True)[0]
+
+        predictions = []
+        for i in range(1, self.num_models+1):
+            model = lgb.Booster(model_file=f'models/saved/model_{i}.txt')
+            y_pred = model.predict(self.data.dropna().loc[:, model.feature_name()])
+            predictions.append(y_pred)
+
+        df_pred = DataFrame(array(predictions).transpose(
+        ), index=self.data.dropna().index, columns=list(range(8)))
+
+        self.predictions = (
+            df_pred.mean(axis=1)
+                    .unstack('ticker')
+                    .shift(self.lookahead)
+                    .dropna()
+                    .rank(axis=1)
+                    .sub(1)
+                    .stack()
+                    .to_frame('Rank')
+        )
+
+    def compute_signal(self, backtest=False):
 
         self.load_data()
         self.compute_features()
-        self.compute_predictions()
+        if not backtest:
+            self.compute_predictions()
+        else:
+            self.compute_backtest_predictions()
 
         return self.data
 
     def compute_backtest(self):
-        pass
+        
+        self.compute_signal(backtest=True)
+
+        self.backtest = self.prices.merge(self.predictions, left_index=True, right_index=True).dropna()
+
+        return self.backtest
 
 
+class BuyNHold(signal):
+
+    def __init__(self, name, data_path, ticker, **kwargs) -> None:
+        super().__init__(name, data_path, ticker)
+    
+    def get_data(self):
+        self.load_OHLCV_data()
+        return self.data
 
 signal_map = {
     'MomentumCrossoverSignal': MomentumCrossoverSignal,
-    'SectorRankSignal': SectorRankSignal
+    'SectorRankSignal': SectorRankSignal,
+    'BuyNHold': BuyNHold
 }

@@ -8,9 +8,10 @@ PT_id = 'SectorRFRank_10082022'  # time.strftime("%Y_%m_%d_%H_%M_%S")
 
 signal_params = {
     'name': 'SectorRankSignal',
-    'params': {'num_long': 3, 'num_short': 3, 'lookahead': 10, 'load_data_history_length': 3*YEAR},
+    'params': {'num_long': 3, 'num_short': 3, 'lookahead': 1, 'load_data_history_length': 3*YEAR},
     'ticker': ['XLK', 'XLP', 'XLB', 'XLF', 'XLV', 'XLY', 'XLE', 'XLU', 'XLI'],
     'data_path': '/Users/yueyuchen/Documents/Academy/Research/MarketWatch/data/daily',
+    'num_models': 28
 }
 
 execution_params = {
